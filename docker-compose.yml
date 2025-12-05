@@ -193,7 +193,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Temporal.POC.api/Dockerfile
     image: temporal-poc-api-api
     container_name: temporal-poc-api
     ports:

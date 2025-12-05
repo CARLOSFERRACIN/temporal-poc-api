@@ -23,3 +23,4 @@ EXPOSE 8081
 
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "Temporal.POC.api.dll"]
+
