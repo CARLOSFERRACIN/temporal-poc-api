@@ -18,11 +18,23 @@ docker-compose up -d --build
 ```
 
 This command will:
-- Build the API Docker image
-- Start PostgreSQL database
-- Start Temporal server
-- Start Temporal UI
-- Start the API container
+- **Build the API Docker images** - Compiles .NET 9 applications
+  - `temporal-poc-api` - Main API with TransactionWorkflow
+  - `temporal-poc-external-domain-api` - External API with Nexus integration
+- **Start PostgreSQL database** - Temporal's persistence layer
+- **Start Temporal server** - Workflow orchestration engine
+  - Loads dynamic configuration from `config/dynamicconfig/docker.yaml`
+  - Enables Nexus operations
+  - Configures callback endpoints
+- **Start Temporal UI** - Web interface for monitoring workflows
+- **Initialize Search Attributes** - Creates custom search fields
+  - ProfileId (Keyword)
+  - ExternalOperationId (Keyword)
+  - OperationType (Keyword)
+- **Create Nexus Endpoint** - Sets up cross-namespace communication
+  - Endpoint: `transaction-nexus-endpoint`
+  - Target namespace: `default`
+  - Target task queue: `default-task-queue`
 
 **Wait 30-60 seconds** for all services to initialize completely.
 
@@ -33,17 +45,23 @@ docker-compose ps
 ```
 
 You should see all containers with status `Up` or `Up (healthy)`:
-- `temporal-poc-api` - API service
-- `temporal` - Temporal server
-- `temporal-postgresql` - PostgreSQL database
-- `temporal-ui` - Temporal web UI
+- `temporal-poc-api` - Main API service (port 5000)
+- `temporal-poc-external-domain-api` - External API with Nexus (port 6000)
+- `temporal` - Temporal server (port 7233)
+- `temporal-postgresql` - PostgreSQL database (port 5432)
+- `temporal-ui` - Temporal web UI (port 8080)
+- `temporal-init-search-attributes` - Exited (ran once to create search attributes)
+- `temporal-init-nexus-endpoint` - Exited (ran once to create Nexus endpoint)
 
 ### Access Points
 
 Once all services are running:
 
-- **API**: `http://localhost:5000`
+- **Main API**: `http://localhost:5000`
+- **External Domain API (Nexus)**: `http://localhost:6000`
 - **Temporal UI**: `http://localhost:8080`
+- **Temporal Server (gRPC)**: `localhost:7233`
+- **PostgreSQL**: `localhost:5432`
 - **Swagger UI**: Available when running locally with `dotnet run` at `https://localhost:5001/swagger`
 
 ## 🔄 Refresh Docker After Code Changes
@@ -195,10 +213,33 @@ Temporal.POC.api/
 
 ## 📦 Docker Compose Services
 
-- **api**: .NET Core 9 API (port 5000)
+### Running Services
+- **api**: Main .NET 9 API (port 5000)
+  - Hosts TransactionWorkflow and RollbackWorkflow
+  - Exposes Nexus Service Handler for cross-namespace calls
+  - Includes custom TemporalWorkerService for Nexus support
+- **external-domain-api**: External .NET 9 API (port 6000)
+  - Demonstrates cross-namespace communication
+  - Calls TransactionWorkflow via Nexus
+  - Independent project with ExternalDomainWorkflow
 - **temporal**: Temporal Server (port 7233)
+  - Workflow orchestration engine
+  - Uses dynamic configuration for Nexus
+  - Connects to PostgreSQL for persistence
 - **temporal-ui**: Temporal Web UI (port 8080)
+  - Visual interface for monitoring workflows
+  - Browse workflow history and execution details
 - **postgresql**: PostgreSQL database (port 5432)
+  - Stores workflow history and state
+  - Temporal's persistence layer
+
+### Init Services (Run Once)
+- **init-search-attributes**: Creates custom search attributes
+  - Runs on startup, exits when complete
+  - Creates ProfileId, ExternalOperationId, OperationType fields
+- **init-nexus-endpoint**: Creates Nexus endpoint
+  - Runs on startup, exits when complete
+  - Creates `transaction-nexus-endpoint` for cross-namespace calls
 
 ## ⚙️ Configuration
 
@@ -216,13 +257,56 @@ Note: When running in Docker, use `temporal:7233` (service name). When running l
 
 ## 🛑 Stop Services
 
-```bash
-# Stop all containers
-docker-compose down
+### Stop Containers (Keep Data)
 
-# Stop and remove volumes (removes all data)
+```bash
+docker-compose down
+```
+
+This will stop and remove containers but keep volumes (data persists).
+
+### Stop and Remove All Data
+
+```bash
 docker-compose down -v
 ```
+
+This will stop containers and remove volumes (all workflow history will be deleted).
+
+### Clean Everything and Start Fresh
+
+If you want to completely clean Docker and rebuild from scratch with fresh images:
+
+```bash
+# Step 1: Stop all containers and remove volumes
+docker-compose down -v
+
+# Step 2: Remove all Docker images, containers, and build cache
+docker system prune -a --volumes -f
+
+# Step 3: Rebuild and start everything from scratch
+docker-compose up -d --build
+```
+
+**What gets deleted:**
+- All containers
+- All Docker images (Temporal, PostgreSQL, APIs, UI)
+- All volumes (workflow history, database data)
+- All build cache
+- All networks
+
+**What happens on rebuild:**
+- Fresh download of Temporal and PostgreSQL images
+- Clean compilation of .NET applications
+- New database without any workflow history
+- Fresh Nexus endpoint creation
+- New search attributes setup
+
+**Note**: This is useful when:
+- You want to test with a completely clean environment
+- You've made significant infrastructure changes
+- You're troubleshooting persistent Docker issues
+- You want to remove all traces of old workflows
 
 ## 📊 View Logs
 

@@ -16,9 +16,9 @@ docker-compose ps
 
 ---
 
-## 📋 Testes da API Principal (`Temporal.POC.api`)
+## 📋 Main API Tests (`Temporal.POC.api`)
 
-### Criar uma transação (sem Nexus)
+### Create a transaction (without Nexus)
 
 ```bash
 curl -X POST http://localhost:5000/v1/transaction \
@@ -101,9 +101,9 @@ curl -X POST http://localhost:5000/v1/transaction \
   }'
 ```
 
-### Enviar sinal Stripe para o workflow
+### Send Stripe signal to workflow
 
-#### ✅ Sinal de SUCESSO
+#### ✅ SUCCESS Signal
 
 ```bash
 curl -X POST http://localhost:5000/v1/stripe-signal \
@@ -116,7 +116,7 @@ curl -X POST http://localhost:5000/v1/stripe-signal \
   }'
 ```
 
-#### ❌ Sinal de FALHA (dispara Rollback)
+#### ❌ FAILURE Signal (triggers Rollback)
 
 ```bash
 curl -X POST http://localhost:5000/v1/stripe-signal \
@@ -129,13 +129,13 @@ curl -X POST http://localhost:5000/v1/stripe-signal \
   }'
 ```
 
-**Nota**: O `ExternalOperationId` e `OperationType` devem corresponder ao workflow que você deseja sinalizar.
+**Note**: `ExternalOperationId` and `OperationType` must match the workflow you want to signal.
 
 ---
 
-## 🔗 Testes via Nexus (`Temporal.POC.ExternalDomain.api`)
+## 🔗 Nexus Tests (`Temporal.POC.ExternalDomain.api`)
 
-### Chamar TransactionWorkflow via Nexus
+### Call TransactionWorkflow via Nexus
 
 ```bash
 curl -X POST http://localhost:6000/v1/external-domain/transaction \
@@ -147,7 +147,7 @@ curl -X POST http://localhost:6000/v1/external-domain/transaction \
   }'
 ```
 
-**Resposta esperada:**
+**Expected response:**
 
 ```json
 {
@@ -162,9 +162,9 @@ curl -X POST http://localhost:6000/v1/external-domain/transaction \
 }
 ```
 
-### Enviar sinal Stripe para workflow criado via Nexus
+### Send Stripe signal to workflow created via Nexus
 
-#### ✅ Sinal de SUCESSO para workflow Nexus
+#### ✅ SUCCESS Signal for Nexus workflow
 
 ```bash
 curl -X POST http://localhost:5000/v1/stripe-signal \
@@ -177,7 +177,7 @@ curl -X POST http://localhost:5000/v1/stripe-signal \
   }'
 ```
 
-#### ❌ Sinal de FALHA para workflow Nexus (dispara Rollback)
+#### ❌ FAILURE Signal for Nexus workflow (triggers Rollback)
 
 ```bash
 curl -X POST http://localhost:5000/v1/stripe-signal \
@@ -192,27 +192,27 @@ curl -X POST http://localhost:5000/v1/stripe-signal \
 
 ---
 
-## 📊 Verificar Logs
+## 📊 Check Logs
 
-### Logs da API Principal
+### Main API Logs
 
 ```bash
 docker logs temporal-poc-api -f
 ```
 
-### Logs da API Externa (Nexus)
+### External API Logs (Nexus)
 
 ```bash
 docker logs temporal-poc-external-domain-api -f
 ```
 
-### Logs do Temporal Server
+### Temporal Server Logs
 
 ```bash
 docker logs temporal -f
 ```
 
-### Verificar se Nexus completou com sucesso
+### Verify if Nexus completed successfully
 
 ```bash
 docker logs temporal-poc-external-domain-api | grep "Transaction completed via Nexus"
@@ -220,24 +220,24 @@ docker logs temporal-poc-external-domain-api | grep "Transaction completed via N
 
 ---
 
-## 🌐 Acessar a UI do Temporal
+## 🌐 Access Temporal UI
 
-Abra no navegador:
+Open in browser:
 
 ```
 http://localhost:8080
 ```
 
-### Filtrar workflows:
+### Filter workflows:
 
 - **ExternalDomainWorkflow**: `WorkflowType = "ExternalDomainWorkflow"`
 - **TransactionWorkflow**: `WorkflowType = "TransactionWorkflow"`
 
 ---
 
-## 🧪 Testes Rápidos
+## 🧪 Quick Tests
 
-### Teste 1: Transaction simples (sem Nexus)
+### Test 1: Simple Transaction (without Nexus)
 
 ```bash
 curl -X POST http://localhost:5000/v1/transaction \
@@ -245,7 +245,7 @@ curl -X POST http://localhost:5000/v1/transaction \
   -d '{"profileId":1010,"externalOperationId":"OP-QUICK-001","operationType":"RadiusMailOrder","appCallerNm":"test","webhookCallBackUrl":"http://temporal-poc-api:8080/v1/webhook","movements":[{"order":1,"subOrder":1,"operationUuid":"UUID-Q-001","transactionUuid":"TXN-Q-001","transactionDestination":"Stripe","transactionType":"ChargeStripeAccount","externalId":"Test-001","operationDt":"2024-01-01 10:00:00.000","operationTotalVl":50.00,"stripeFields":{"partnerProfileId":"TEST"},"lines":[{"lineType":"Integration","lineVl":50.00}]}]}'
 ```
 
-### Teste 2: Nexus (recomendado)
+### Test 2: Nexus (recommended)
 
 ```bash
 curl -X POST http://localhost:6000/v1/external-domain/transaction \
@@ -255,7 +255,7 @@ curl -X POST http://localhost:6000/v1/external-domain/transaction \
 
 ---
 
-## 🔍 Verificar Nexus Endpoint
+## 🔍 Verify Nexus Endpoint
 
 ```bash
 docker exec temporal temporal operator nexus endpoint list --address temporal:7233
@@ -263,13 +263,13 @@ docker exec temporal temporal operator nexus endpoint list --address temporal:72
 
 ---
 
-## 🛑 Parar o ambiente
+## 🛑 Stop Environment
 
 ```bash
 docker-compose down
 ```
 
-### Limpar volumes (remover dados persistidos)
+### Clean volumes (remove persisted data)
 
 ```bash
 docker-compose down -v

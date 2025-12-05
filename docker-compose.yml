@@ -1,4 +1,17 @@
 services:
+  # ============================================================================
+  # PostgreSQL Database
+  # ============================================================================
+  # Purpose: Temporal's persistence layer - stores workflow history, state, and metadata
+  # Image: postgres:15-alpine - Lightweight PostgreSQL 15 image
+  # Access: localhost:5432
+  # Credentials: temporal/temporal
+  # Database: temporal
+  # Notes: 
+  #   - All workflow execution history is stored here
+  #   - Data persists in 'postgres-data' volume
+  #   - Required for Temporal server to function
+  # ============================================================================
   postgresql:
     image: postgres:15-alpine
     container_name: temporal-postgresql
@@ -7,7 +20,7 @@ services:
       - POSTGRES_PASSWORD=temporal
       - POSTGRES_DB=temporal
     ports:
-      - "5432:5432"
+      - "5432:5432"  # Access PostgreSQL from host at localhost:5432
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -18,11 +31,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # ============================================================================
+  # Temporal Server
+  # ============================================================================
+  # Purpose: Workflow orchestration engine - manages workflow execution, state, and history
+  # Image: temporalio/auto-setup:latest - Temporal server with auto-configuration
+  # Access: localhost:7233 (gRPC) - Not accessible via browser
+  # How to use: Connect via Temporal SDK or tctl CLI
+  # Notes:
+  #   - Loads dynamic config from config/dynamicconfig/docker.yaml
+  #   - Enables Nexus operations for cross-namespace communication
+  #   - Stores data in PostgreSQL
+  #   - Required for all workflows to run
+  # Configuration:
+  #   - system.enableNexus: true
+  #   - Nexus callback endpoint: http://127.0.0.1:7243/namespaces/.../nexus/callback
+  # ============================================================================
   temporal:
     image: temporalio/auto-setup:latest
     container_name: temporal
     ports:
-      - "7233:7233"
+      - "7233:7233"  # gRPC endpoint for Temporal SDK clients
     environment:
       - DB=postgres12_pgx
       - DB_PORT=5432
@@ -44,11 +73,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # ============================================================================
+  # Temporal Web UI
+  # ============================================================================
+  # Purpose: Visual interface for monitoring and managing workflows
+  # Image: temporalio/ui:latest - Temporal's official web UI
+  # Access: http://localhost:8080
+  # Features:
+  #   - View all workflows and their execution history
+  #   - Monitor workflow status (Running, Completed, Failed)
+  #   - Browse workflow details, activities, and events
+  #   - Search workflows by ID or custom search attributes
+  #   - Replay, terminate, or cancel workflows
+  #   - View Nexus endpoints and operations
+  # Notes:
+  #   - Open in browser to visualize workflows
+  #   - Default namespace: "default"
+  #   - No authentication required (development mode)
+  # ============================================================================
   temporal-ui:
     image: temporalio/ui:latest
     container_name: temporal-ui
     ports:
-      - "8080:8080"
+      - "8080:8080"  # Web UI accessible at http://localhost:8080
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CORS_ORIGINS=http://localhost:3000
@@ -58,6 +105,22 @@ services:
     networks:
       - temporal-network
 
+  # ============================================================================
+  # Init: Search Attributes Setup
+  # ============================================================================
+  # Purpose: One-time setup to create custom search attributes in Temporal
+  # Image: temporalio/auto-setup:latest - Used to run tctl commands
+  # Lifecycle: Runs once on startup, then exits
+  # Creates:
+  #   - ProfileId (Keyword) - For filtering workflows by profile
+  #   - ExternalOperationId (Keyword) - For filtering by operation ID
+  #   - OperationType (Keyword) - For filtering by operation type
+  # Notes:
+  #   - Exits after completion (restart: "no")
+  #   - Safe to run multiple times (ignores if attributes already exist)
+  #   - Must complete before APIs start
+  # Script: ./init-search-attributes.sh
+  # ============================================================================
   init-search-attributes:
     image: temporalio/auto-setup:latest
     container_name: temporal-init-search-attributes
@@ -71,8 +134,25 @@ services:
         condition: service_healthy
     networks:
       - temporal-network
-    restart: "no"
+    restart: "no"  # Run once and exit
 
+  # ============================================================================
+  # Init: Nexus Endpoint Setup
+  # ============================================================================
+  # Purpose: One-time setup to create Nexus endpoint for cross-namespace communication
+  # Image: temporalio/auto-setup:latest - Used to run temporal CLI commands
+  # Lifecycle: Runs once on startup, then exits
+  # Creates:
+  #   - Endpoint name: transaction-nexus-endpoint
+  #   - Target namespace: default
+  #   - Target task queue: default-task-queue
+  # Notes:
+  #   - Enables ExternalDomainWorkflow to call TransactionWorkflow via Nexus
+  #   - Exits after completion (restart: "no")
+  #   - Safe to run multiple times (ignores if endpoint already exists)
+  #   - Must complete before APIs start
+  # Script: ./setup-nexus-endpoint.sh
+  # ============================================================================
   init-nexus-endpoint:
     image: temporalio/auto-setup:latest
     container_name: temporal-init-nexus-endpoint
@@ -86,8 +166,30 @@ services:
         condition: service_healthy
     networks:
       - temporal-network
-    restart: "no"
+    restart: "no"  # Run once and exit
 
+  # ============================================================================
+  # Main API - Transaction Processing
+  # ============================================================================
+  # Purpose: Primary .NET 9 API for transaction processing with Temporal workflows
+  # Build: Compiles from ./Dockerfile (multi-stage build)
+  # Access: http://localhost:5000
+  # Endpoints:
+  #   POST /v1/transaction - Create new transaction (starts TransactionWorkflow)
+  #   POST /v1/stripe-signal - Send Stripe payment signal to workflow
+  #   POST /v1/webhook - Receive webhook callbacks (internal)
+  # Features:
+  #   - TransactionWorkflow: Main workflow for processing transactions
+  #   - RollbackWorkflow: Handles transaction rollback on failure
+  #   - MovementActivity: Processes Stripe and Balance operations
+  #   - WebhookActivity: Sends HTTP callbacks
+  #   - Nexus Service Handler: Exposes TransactionWorkflow for cross-namespace calls
+  # Notes:
+  #   - Custom TemporalWorkerService for Nexus support
+  #   - Connects to Temporal at temporal:7233
+  #   - Waits for search attributes and Nexus endpoint setup
+  #   - Auto-restarts if it crashes (restart: unless-stopped)
+  # ============================================================================
   api:
     build:
       context: .
@@ -95,7 +197,7 @@ services:
     image: temporal-poc-api-api
     container_name: temporal-poc-api
     ports:
-      - "5000:8080"
+      - "5000:8080"  # Main API accessible at http://localhost:5000
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
@@ -112,6 +214,33 @@ services:
       - temporal-network
     restart: unless-stopped
 
+  # ============================================================================
+  # External Domain API - Nexus Integration
+  # ============================================================================
+  # Purpose: Independent .NET 9 API demonstrating cross-namespace workflow calls via Nexus
+  # Build: Compiles from ./Temporal.POC.ExternalDomain.api/Dockerfile
+  # Access: http://localhost:6000
+  # Endpoints:
+  #   POST /v1/external-domain/transaction - Create transaction via Nexus
+  #     Body: { "profileId": 1010, "externalOperationId": "OP-001", "operationType": "RadiusMailOrder" }
+  # Features:
+  #   - ExternalDomainWorkflow: Calls TransactionWorkflow via Nexus
+  #   - Creates TransactionRequest internally
+  #   - Demonstrates cross-namespace communication
+  #   - Independent project with its own worker
+  # Notes:
+  #   - This is the RECOMMENDED way to test the system
+  #   - Completely decoupled from main API (only communicates via Nexus)
+  #   - Worker receives results via polling (not HTTP callbacks)
+  #   - Auto-restarts if it crashes (restart: unless-stopped)
+  # How Nexus works:
+  #   1. ExternalDomainAPI receives HTTP request
+  #   2. Starts ExternalDomainWorkflow
+  #   3. Workflow calls TransactionWorkflow via Nexus
+  #   4. TransactionWorkflow executes in main API's worker
+  #   5. Result returns to ExternalDomainWorkflow via polling
+  #   6. ExternalDomainWorkflow completes
+  # ============================================================================
   external-domain-api:
     build:
       context: .
@@ -119,7 +248,7 @@ services:
     image: temporal-poc-external-domain-api
     container_name: temporal-poc-external-domain-api
     ports:
-      - "6000:8080"
+      - "6000:8080"  # External API accessible at http://localhost:6000
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
@@ -136,10 +265,30 @@ services:
       - temporal-network
     restart: unless-stopped
 
+# ==============================================================================
+# Docker Volumes
+# ==============================================================================
+# Purpose: Persist data across container restarts
+# Notes:
+#   - Data survives 'docker-compose down'
+#   - Deleted only with 'docker-compose down -v'
+# ==============================================================================
 volumes:
   temporal-data:
+    # Stores Temporal server data (configuration, cache)
   postgres-data:
+    # Stores all workflow history and Temporal metadata
+    # WARNING: Deleting this volume will erase all workflow history
 
+# ==============================================================================
+# Docker Network
+# ==============================================================================
+# Purpose: Allow containers to communicate with each other
+# Type: Bridge network (default Docker network type)
+# Notes:
+#   - Containers can reach each other by service name (e.g., 'temporal', 'postgresql')
+#   - Isolated from host network
+# ==============================================================================
 networks:
   temporal-network:
     driver: bridge

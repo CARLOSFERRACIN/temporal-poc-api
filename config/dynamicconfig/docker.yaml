@@ -1,24 +1,24 @@
 # Temporal Dynamic Configuration
 # https://docs.temporal.io/references/dynamic-configuration
 #
-# Este arquivo habilita Nexus no Temporal Server.
-# O arquivo é montado no docker-compose.yml e referenciado via
+# This file enables Nexus in Temporal Server.
+# The file is mounted in docker-compose.yml and referenced via
 # DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/dynamicconfig/docker.yaml
 
-# Habilita operações Nexus no servidor
+# Enable Nexus operations on the server
 system.enableNexus:
   - value: true
     constraints: {}
 
 # Nexus callback endpoint configuration
-# O Temporal Server requer essa configuração para processar callbacks
-# O Worker processa via polling, mas o servidor precisa saber para onde enviar callbacks
-# Usando o endpoint HTTP interno do Temporal Server
+# Temporal Server requires this configuration to process callbacks
+# Worker processes via polling, but the server needs to know where to send callbacks
+# Using Temporal Server's internal HTTP endpoint
 component.nexusoperations.callback.endpoint.template:
   - value: "http://127.0.0.1:7243/namespaces/{{.NamespaceName}}/nexus/callback"
     constraints: {}
 
-# Permite callbacks de qualquer endereço (apenas para desenvolvimento)
+# Allow callbacks from any address (development only)
 component.callbacks.allowedAddresses:
   - value:
       - Pattern: "*"
