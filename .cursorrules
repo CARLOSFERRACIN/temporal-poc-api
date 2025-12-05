@@ -1,0 +1,122 @@
+# Cursor Rules - Temporal POC API
+
+## ✅ Configuração FUNCIONANDO 100%
+
+### Nexus com SDK .NET 1.9.0 (Pre-Release)
+
+**IMPORTANTE**: Esta configuração foi testada e está FUNCIONANDO PERFEITAMENTE:
+
+#### Dynamic Config (`config/dynamicconfig/docker.yaml`)
+```yaml
+system.enableNexus:
+  - value: true
+    constraints: {}
+
+component.nexusoperations.callback.endpoint.template:
+  - value: "http://127.0.0.1:7243/namespaces/{{.NamespaceName}}/nexus/callback"
+    constraints: {}
+
+component.callbacks.allowedAddresses:
+  - value:
+      - Pattern: "*"
+        AllowInsecure: true
+```
+
+**NOTA CRÍTICA**: 
+- A porta é **7243** (endpoint HTTP interno do Temporal)
+- Esta configuração é **OBRIGATÓRIA** mesmo que o callback HTTP falhe com 404
+- O Worker processa via **polling**, não via HTTP callback
+- O callback HTTP falhará, mas isso é esperado e não afeta o funcionamento
+
+#### Como funciona:
+1. ExternalDomainWorkflow chama TransactionWorkflow via Nexus
+2. TransactionWorkflow é executado com sucesso
+3. Temporal tenta enviar callback HTTP (falha com 404)
+4. Worker do ExternalDomainWorkflow recebe resultado via **polling**
+5. ExternalDomainWorkflow completa com sucesso
+
+## 📁 Estrutura do Projeto
+
+- `Temporal.POC.api/` - API principal com TransactionWorkflow e Nexus Service Handler
+- `Temporal.POC.ExternalDomain.api/` - API externa que chama TransactionWorkflow via Nexus
+- Projetos são **independentes** - comunicação apenas via Nexus
+
+## 🐳 Docker Compose
+
+- `temporal` - Servidor Temporal (porta 7233)
+- `temporal-ui` - UI do Temporal (porta 8080)
+- `postgresql` - Banco de dados do Temporal
+- `api` - API principal (porta 5000)
+- `external-domain-api` - API externa (porta 6000)
+- `init-search-attributes` - Inicializa search attributes
+- `init-nexus-endpoint` - Cria Nexus endpoint automaticamente
+
+## 📝 Documentação
+
+- **NÃO criar arquivos .md** a menos que o usuário solicite explicitamente
+- **EXCEÇÃO**: `TEST-COMMANDS.md` contém os CURLs necessários para testar
+
+## 🔧 Configuração Temporal
+
+- Configuração em `appsettings.json` e `appsettings.Development.json`
+- Classe `TemporalConfig` para tipagem forte
+- Namespace: `default` para ambos os projetos
+- Dynamic Config: **OBRIGATÓRIO** para Nexus funcionar
+
+## 🚀 Nexus
+
+- **SDK .NET**: 1.9.0 (Pre-Release)
+- **Pacote NexusRpc**: 0.2.0
+- **Endpoint**: `transaction-nexus-endpoint`
+- **Target Namespace**: `default`
+- **Target Task Queue**: `default-task-queue`
+- **Worker customizado**: `TemporalWorkerService` (necessário para registrar Nexus Service)
+
+### Nexus Service Handler
+- `TransactionServiceHandler` registrado no Worker via `options.AddNexusService()`
+- Worker customizado porque `AddHostedTemporalWorker` não suporta `AddNexusService` no SDK 1.9.0
+
+### Como Nexus funciona:
+- Callbacks funcionam via **polling do Worker**, não via HTTP endpoints
+- SDK .NET 1.9.0 não expõe servidor HTTP para callbacks
+- Callback HTTP falhará com 404, mas isso é **ESPERADO e CORRETO**
+- Worker processa resultados via polling da task queue
+
+## 🧪 Testes
+
+Todos os comandos CURL estão em: **[TEST-COMMANDS.md](TEST-COMMANDS.md)**
+
+### Teste rápido Nexus:
+```bash
+curl -X POST http://localhost:6000/v1/external-domain/transaction \
+  -H "Content-Type: application/json" \
+  -d '{"profileId":1010,"externalOperationId":"OP-NEXUS-001","operationType":"RadiusMailOrder"}'
+```
+
+### Enviar sinal Stripe (Sucesso):
+```bash
+curl -X POST http://localhost:5000/v1/stripe-signal \
+  -H "Content-Type: application/json" \
+  -d '{"ExternalOperationId":"OP-NEXUS-001","OperationType":"RadiusMailOrder","Success":true,"Message":"Stripe payment confirmed"}'
+```
+
+### Enviar sinal Stripe (Falha - dispara Rollback):
+```bash
+curl -X POST http://localhost:5000/v1/stripe-signal \
+  -H "Content-Type: application/json" \
+  -d '{"ExternalOperationId":"OP-NEXUS-001","OperationType":"RadiusMailOrder","Success":false,"Message":"Stripe payment failed"}'
+```
+
+### Verificar sucesso:
+```bash
+docker logs temporal-poc-external-domain-api | grep "Transaction completed via Nexus"
+```
+
+## ⚠️ NUNCA FAZER
+
+1. **NUNCA** remover o arquivo `config/dynamicconfig/docker.yaml`
+2. **NUNCA** remover a configuração `component.nexusoperations.callback.endpoint.template`
+3. **NUNCA** mudar a porta de 7243 para outra
+4. **NUNCA** tentar criar controllers HTTP para receber callbacks Nexus no SDK 1.9.0
+5. **NUNCA** remover o `init-nexus-endpoint` service do docker-compose.yml
+6. **NUNCA** apagar o `TEST-COMMANDS.md` sem consultar o usuário

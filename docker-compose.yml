@@ -23,15 +23,16 @@ services:
     container_name: temporal
     ports:
       - "7233:7233"
-      - "8088:8088"
     environment:
       - DB=postgres12_pgx
       - DB_PORT=5432
       - POSTGRES_USER=temporal
       - POSTGRES_PWD=temporal
       - POSTGRES_SEEDS=postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/dynamicconfig/docker.yaml
     volumes:
       - temporal-data:/var/lib/temporal
+      - ./config/dynamicconfig/docker.yaml:/etc/temporal/config/dynamicconfig/docker.yaml:ro
     networks:
       - temporal-network
     depends_on:
@@ -72,6 +73,21 @@ services:
       - temporal-network
     restart: "no"
 
+  init-nexus-endpoint:
+    image: temporalio/auto-setup:latest
+    container_name: temporal-init-nexus-endpoint
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    volumes:
+      - ./setup-nexus-endpoint.sh:/setup-nexus-endpoint.sh:ro
+    entrypoint: ["/bin/sh", "/setup-nexus-endpoint.sh"]
+    depends_on:
+      temporal:
+        condition: service_healthy
+    networks:
+      - temporal-network
+    restart: "no"
+
   api:
     build:
       context: .
@@ -80,7 +96,6 @@ services:
     container_name: temporal-poc-api
     ports:
       - "5000:8080"
-      - "5001:8081"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
@@ -90,6 +105,32 @@ services:
       temporal:
         condition: service_healthy
       init-search-attributes:
+        condition: service_completed_successfully
+      init-nexus-endpoint:
+        condition: service_completed_successfully
+    networks:
+      - temporal-network
+    restart: unless-stopped
+
+  external-domain-api:
+    build:
+      context: .
+      dockerfile: Temporal.POC.ExternalDomain.api/Dockerfile
+    image: temporal-poc-external-domain-api
+    container_name: temporal-poc-external-domain-api
+    ports:
+      - "6000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - Temporal__Address=temporal
+      - Temporal__Port=7233
+    depends_on:
+      temporal:
+        condition: service_healthy
+      init-search-attributes:
+        condition: service_completed_successfully
+      init-nexus-endpoint:
         condition: service_completed_successfully
     networks:
       - temporal-network

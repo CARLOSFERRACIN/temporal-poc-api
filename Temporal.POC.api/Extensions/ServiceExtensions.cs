@@ -1,7 +1,10 @@
 using Temporal.POC.Api.Activities;
 using Temporal.POC.Api.Config;
+using Temporal.POC.Api.Services;
+using Temporal.POC.Api.Services.Worker;
 using Temporal.POC.Api.Workflows;
 using Temporalio.Extensions.Hosting;
+using Temporalio.Nexus;
 
 namespace Temporal.POC.Api.Extensions;
 
@@ -31,21 +34,11 @@ public static class ServiceExtensions
                 opt.Identity = temporalConfig.Identity;
             });
 
-        // Add Hosted Temporal Worker
-        services
-            .AddHostedTemporalWorker(temporalConfig.TaskQueue)
-            .ConfigureOptions(opt =>
-            {
-                opt.MaxConcurrentWorkflowTasks = temporalConfig.Worker.MaxConcurrentWorkflowTasks;
-                opt.MaxConcurrentActivities = temporalConfig.Worker.MaxConcurrentActivities;
-                opt.MaxConcurrentLocalActivities = temporalConfig.Worker.MaxConcurrentLocalActivities;
-                opt.MaxConcurrentActivityTaskPolls = temporalConfig.Worker.MaxConcurrentActivityTaskPolls;
-                opt.MaxConcurrentWorkflowTaskPolls = temporalConfig.Worker.MaxConcurrentWorkflowTaskPolls;
-            })
-            .AddScopedActivities<MovementActivity>()
-            .AddScopedActivities<WebhookActivity>()
-            .AddWorkflow<TransactionWorkflow>()
-            .AddWorkflow<RollbackWorkflow>();
+        // Add custom Temporal Worker with Nexus support
+        services.AddHostedService<Services.Worker.TemporalWorkerService>();
+
+        // Register Nexus Service Handler for HTTP endpoint
+        services.AddSingleton<TransactionServiceHandler>();
 
         return services;
     }

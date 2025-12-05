@@ -1,4 +1,4 @@
-using Temporal.POC.Api.Extensions;
+using Temporal.POC.ExternalDomain.Api.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,4 +22,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-
