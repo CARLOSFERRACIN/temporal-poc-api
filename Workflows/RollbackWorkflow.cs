@@ -1,6 +1,6 @@
-using Temporalio.Workflows;
-using Temporal.POC.Api.Models;
 using Temporal.POC.Api.Activities;
+using Temporal.POC.Api.Models;
+using Temporalio.Workflows;
 
 namespace Temporal.POC.Api.Workflows;
 

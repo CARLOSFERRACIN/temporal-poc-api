@@ -76,6 +76,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: temporal-poc-api-api
     container_name: temporal-poc-api
     ports:
       - "5000:8080"
@@ -83,7 +84,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - Temporal__Address=temporal:7233
+      - Temporal__Address=temporal
+      - Temporal__Port=7233
     depends_on:
       temporal:
         condition: service_healthy

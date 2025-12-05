@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
-using Temporalio.Client;
+using Microsoft.Extensions.Options;
+using Temporal.POC.Api.Config;
 using Temporal.POC.Api.Models;
 using Temporal.POC.Api.Workflows;
+using Temporalio.Api.Enums.V1;
+using Temporalio.Client;
 using Temporalio.Common;
+using Temporalio.Exceptions;
 
 namespace Temporal.POC.Api.Controllers;
 
@@ -11,27 +15,32 @@ namespace Temporal.POC.Api.Controllers;
 public class TransactionController : ControllerBase
 {
     private readonly ITemporalClient _temporalClient;
+    private readonly TemporalConfig _temporalConfig;
     private readonly ILogger<TransactionController> _logger;
 
-    public TransactionController(ITemporalClient temporalClient, ILogger<TransactionController> logger)
+    public TransactionController(
+        ITemporalClient temporalClient,
+        IOptions<TemporalConfig> temporalConfig,
+        ILogger<TransactionController> logger)
     {
         _temporalClient = temporalClient;
+        _temporalConfig = temporalConfig.Value;
         _logger = logger;
     }
 
     [HttpPost("transaction")]
     public async Task<IActionResult> CreateTransaction([FromBody] TransactionRequest request)
     {
+        if (request == null)
+        {
+            return BadRequest("Request body is required");
+        }
+
+        // Generate workflow ID: operation-{OperationType}-{ExternalOperationId}
+        var workflowId = $"operation-{request.OperationType}-{request.ExternalOperationId}";
+
         try
         {
-            if (request == null)
-            {
-                return BadRequest("Request body is required");
-            }
-
-            // Generate workflow ID: operation-{OperationType}-{ExternalOperationId}
-            var workflowId = $"operation-{request.OperationType}-{request.ExternalOperationId}";
-
             _logger.LogInformation("Starting workflow with ID: {WorkflowId}", workflowId);
 
             // Build Search Attributes for filtering in Temporal UI
@@ -41,10 +50,20 @@ public class TransactionController : ControllerBase
                 .Set(SearchAttributeKey.CreateKeyword("OperationType"), request.OperationType)
                 .ToSearchAttributeCollection();
 
+            // Parse WorkflowIdReusePolicy from config
+            var policyString = _temporalConfig.WorkflowIdReusePolicy ?? "RejectDuplicate";
+            var idReusePolicy = Enum.TryParse<WorkflowIdReusePolicy>(policyString, true, out var policy)
+                ? policy
+                : WorkflowIdReusePolicy.RejectDuplicate;
+
+            _logger.LogInformation("Starting workflow with ID: {WorkflowId}, WorkflowIdReusePolicy: {Policy} (from config: {ConfigValue})",
+                workflowId, idReusePolicy, policyString);
+
             var workflowOptions = new WorkflowOptions()
             {
                 Id = workflowId,
-                TaskQueue = "default-task-queue",
+                TaskQueue = _temporalConfig.TaskQueue,
+                IdReusePolicy = idReusePolicy,
                 TypedSearchAttributes = searchAttributes
             };
 
@@ -62,6 +81,16 @@ public class TransactionController : ControllerBase
                 WorkflowId = workflowId,
                 RunId = handle.ResultRunId,
                 Message = "Transaction workflow started successfully"
+            });
+        }
+        catch (WorkflowAlreadyStartedException ex)
+        {
+            _logger.LogWarning(ex, "Workflow with ID {WorkflowId} already started", workflowId);
+            return Conflict(new
+            {
+                Error = "Workflow already exists",
+                Message = $"A workflow with ID '{workflowId}' is already running. Duplicate workflow IDs are not allowed.",
+                WorkflowId = workflowId
             });
         }
         catch (Exception ex)

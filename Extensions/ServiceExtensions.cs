@@ -1,4 +1,5 @@
 using Temporal.POC.Api.Activities;
+using Temporal.POC.Api.Config;
 using Temporal.POC.Api.Workflows;
 using Temporalio.Extensions.Hosting;
 
@@ -8,33 +9,38 @@ public static class ServiceExtensions
 {
     public static IServiceCollection AddTemporalServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // Get Temporal address from configuration (use service name in Docker, localhost when running locally)
-        var temporalAddress = configuration.GetValue<string>("Temporal:Address") ?? "temporal:7233";
-        
-        // Extract host and port from address
-        var parts = temporalAddress.Split(':');
-        var host = parts[0];
-        var port = parts.Length > 1 ? int.Parse(parts[1]) : 7233;
+        // Register TemporalConfig from appsettings
+        services.Configure<TemporalConfig>(
+            configuration.GetSection(TemporalConfig.SectionName));
+
+        // Get TemporalConfig instance
+        var temporalConfig = configuration.GetSection(TemporalConfig.SectionName).Get<TemporalConfig>()
+            ?? new TemporalConfig();
+
+        // Build the target host - check if Address already contains port
+        var targetHost = temporalConfig.Address.Contains(':')
+            ? temporalConfig.Address
+            : $"{temporalConfig.Address}:{temporalConfig.Port}";
 
         // Add Temporal Client using the hosting extensions
         services.AddTemporalClient(
-            clientTargetHost: $"{host}:{port}",
-            clientNamespace: "default")
+            clientTargetHost: targetHost,
+            clientNamespace: temporalConfig.Namespace)
             .Configure(opt =>
             {
-                opt.Identity = "Temporal.POC.api";
+                opt.Identity = temporalConfig.Identity;
             });
 
         // Add Hosted Temporal Worker
         services
-            .AddHostedTemporalWorker("default-task-queue")
+            .AddHostedTemporalWorker(temporalConfig.TaskQueue)
             .ConfigureOptions(opt =>
             {
-                opt.MaxConcurrentWorkflowTasks = 100;
-                opt.MaxConcurrentActivities = 100;
-                opt.MaxConcurrentLocalActivities = 100;
-                opt.MaxConcurrentActivityTaskPolls = 20;
-                opt.MaxConcurrentWorkflowTaskPolls = 20;
+                opt.MaxConcurrentWorkflowTasks = temporalConfig.Worker.MaxConcurrentWorkflowTasks;
+                opt.MaxConcurrentActivities = temporalConfig.Worker.MaxConcurrentActivities;
+                opt.MaxConcurrentLocalActivities = temporalConfig.Worker.MaxConcurrentLocalActivities;
+                opt.MaxConcurrentActivityTaskPolls = temporalConfig.Worker.MaxConcurrentActivityTaskPolls;
+                opt.MaxConcurrentWorkflowTaskPolls = temporalConfig.Worker.MaxConcurrentWorkflowTaskPolls;
             })
             .AddScopedActivities<MovementActivity>()
             .AddScopedActivities<WebhookActivity>()

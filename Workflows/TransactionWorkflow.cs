@@ -1,6 +1,6 @@
-using Temporalio.Workflows;
-using Temporal.POC.Api.Models;
 using Temporal.POC.Api.Activities;
+using Temporal.POC.Api.Models;
+using Temporalio.Workflows;
 
 namespace Temporal.POC.Api.Workflows;
 
@@ -52,10 +52,7 @@ public class TransactionWorkflow
                 _stripeMessage = string.Empty;
 
                 // Wait for signal with timeout (5 minutes)
-                var signalReceived = await Workflow.WaitConditionAsync(
-                    () => _stripeSignalReceived,
-                    TimeSpan.FromMinutes(5)
-                );
+                var signalReceived = await Workflow.WaitConditionAsync(() => _stripeSignalReceived, TimeSpan.FromMinutes(5));
 
                 if (!signalReceived)
                 {
@@ -64,10 +61,21 @@ public class TransactionWorkflow
                     _stripeMessage = "Signal timeout";
                 }
 
+                try
+                {
+
+                }
+                catch (Exception)
+                {
+                    //start rollback
+                    throw;
+                }
+
+
                 if (!_stripeSuccess)
                 {
                     Workflow.Logger.LogWarning("Stripe operation failed. Starting rollback workflow...");
-                    
+
                     // Start rollback workflow
                     var rollbackWorkflowId = $"{Workflow.Info.WorkflowId}-rollback";
                     var rollbackHandle = await Workflow.StartChildWorkflowAsync(
@@ -80,12 +88,12 @@ public class TransactionWorkflow
                     );
 
                     Workflow.Logger.LogInformation("Rollback workflow started with ID: {RollbackWorkflowId}", rollbackWorkflowId);
-                    
+
                     // Wait for rollback to complete
                     var rollbackResult = await rollbackHandle.GetResultAsync();
-                    
+
                     Workflow.Logger.LogWarning("Rollback workflow completed: {Result}", rollbackResult);
-                    
+
                     return $"Transaction failed. Rollback initiated: {rollbackResult}";
                 }
 

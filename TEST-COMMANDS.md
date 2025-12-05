@@ -196,12 +196,32 @@ docker-compose logs -f postgresql
 
 The workflow sends a webhook to the `WebhookCallBackUrl` specified in the transaction request after all movements are processed.
 
-1. **Get a webhook URL**:
+### 📍 Webhook URL Configuration
+
+**When running in Docker**, use the correct URL based on where the call originates:
+
+- **From inside Docker (workflow calling itself)**: 
+  - Use: `http://temporal-poc-api:8080/v1/webhook`
+  - This uses the container name and internal port (8080)
+
+- **From host machine (external calls)**:
+  - Use: `http://localhost:5000/v1/webhook`
+  - This uses the mapped port (5000)
+
+- **From another container in the same network**:
+  - Use: `http://temporal-poc-api:8080/v1/webhook`
+  - Container name resolves within Docker network
+
+### 🧪 Testing Options
+
+1. **Test with webhook.site** (recommended for testing):
    - Visit https://webhook.site
    - Copy your unique URL
+   - Use this URL in `WebhookCallBackUrl` field
 
-2. **Include the webhook URL in your transaction request**:
-   - Replace `WebhookCallBackUrl` in the transaction payload with your webhook.site URL
+2. **Test with internal webhook endpoint**:
+   - Use: `http://temporal-poc-api:8080/v1/webhook` (when running in Docker)
+   - Use: `http://localhost:5000/v1/webhook` (when running locally)
 
 3. **Check webhook.site** after the workflow completes:
    - You should see a POST request with the completion status
@@ -242,7 +262,7 @@ curl -X POST "http://localhost:5000/v1/transaction" \
     "ExternalOperationId": "OP-SUCCESS-TEST",
     "OperationType": "RadiusMailOrder",
     "AppCallerNm": "test-success",
-    "WebhookCallBackUrl": "http://api:8080/v1/webhook",
+    "WebhookCallBackUrl": "http://temporal-poc-api:8080/v1/webhook",
     "Movements": [
       {
         "Order": 1,
@@ -344,7 +364,7 @@ curl -X POST "http://localhost:5000/v1/transaction" \
     "ExternalOperationId": "OP-FAILURE-TEST",
     "OperationType": "RadiusMailOrder",
     "AppCallerNm": "test-failure",
-    "WebhookCallBackUrl": "http://api:8080/v1/webhook",
+    "WebhookCallBackUrl": "http://temporal-poc-api:8080/v1/webhook",
     "Movements": [
       {
         "Order": 1,
@@ -484,7 +504,7 @@ curl -X POST "http://localhost:5000/v1/transaction" \
     "ExternalOperationId": "OP-12345",
     "OperationType": "RadiusMailOrder",
     "AppCallerNm": "postman",
-    "WebhookCallBackUrl": "http://api:8080/v1/webhook",
+    "WebhookCallBackUrl": "http://temporal-poc-api:8080/v1/webhook",
     "Movements": [...]
   }'
 ```

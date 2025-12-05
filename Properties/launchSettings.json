@@ -1,8 +1,9 @@
 {
   "profiles": {
-    "Temporal.POC.api": {
+    "Temporal.POC.api-Dev": {
       "commandName": "Project",
       "launchBrowser": true,
+      "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },

@@ -1,5 +1,5 @@
-using Temporalio.Activities;
 using Temporal.POC.Api.Models;
+using Temporalio.Activities;
 
 namespace Temporal.POC.Api.Activities;
 
@@ -11,9 +11,6 @@ public class MovementActivity
         ActivityExecutionContext.Current.Logger.LogInformation(
             "Processing movement - Order: {Order}, SubOrder: {SubOrder}, TransactionType: {TransactionType}, TransactionDestination: {TransactionDestination}",
             movement.Order, movement.SubOrder, movement.TransactionType, movement.TransactionDestination);
-
-        // Simulate processing time
-        await Task.Delay(1000);
 
         // Process based on transaction destination
         string result;
@@ -43,9 +40,6 @@ public class MovementActivity
             "Processing Stripe movement - TransactionType: {TransactionType}, Amount: {Amount}",
             movement.TransactionType, movement.OperationTotalVl);
 
-        // Simulate Stripe API call
-        await Task.Delay(500);
-
         // Generate a unique ID for Stripe (as mentioned in the payload example)
         var uniqueId = Guid.NewGuid().ToString().ToUpper();
 
@@ -66,9 +60,6 @@ public class MovementActivity
         ActivityExecutionContext.Current.Logger.LogInformation(
             "Processing Balance movement - TransactionType: {TransactionType}, Amount: {Amount}, ProfileId: {ProfileId}",
             movement.TransactionType, movement.OperationTotalVl, movement.BalanceFields?.ProfileId);
-
-        // Simulate balance processing
-        await Task.Delay(500);
 
         return $"Balance movement processed successfully. TransactionType: {movement.TransactionType}, Amount: {movement.OperationTotalVl}, ProfileId: {movement.BalanceFields?.ProfileId}";
     }
