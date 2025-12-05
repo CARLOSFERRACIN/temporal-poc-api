@@ -1,0 +1,103 @@
+services:
+  postgresql:
+    image: postgres:15-alpine
+    container_name: temporal-postgresql
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_DB=temporal
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - temporal-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: temporal
+    ports:
+      - "7233:7233"
+      - "8088:8088"
+    environment:
+      - DB=postgres12_pgx
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+    volumes:
+      - temporal-data:/var/lib/temporal
+    networks:
+      - temporal-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: temporal-ui
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      temporal:
+        condition: service_healthy
+    networks:
+      - temporal-network
+
+  init-search-attributes:
+    image: temporalio/auto-setup:latest
+    container_name: temporal-init-search-attributes
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    volumes:
+      - ./init-search-attributes.sh:/init-search-attributes.sh:ro
+    entrypoint: ["/bin/sh", "/init-search-attributes.sh"]
+    depends_on:
+      temporal:
+        condition: service_healthy
+    networks:
+      - temporal-network
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: temporal-poc-api
+    ports:
+      - "5000:8080"
+      - "5001:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - Temporal__Address=temporal:7233
+    depends_on:
+      temporal:
+        condition: service_healthy
+      init-search-attributes:
+        condition: service_completed_successfully
+    networks:
+      - temporal-network
+    restart: unless-stopped
+
+volumes:
+  temporal-data:
+  postgres-data:
+
+networks:
+  temporal-network:
+    driver: bridge
+
